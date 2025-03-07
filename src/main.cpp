@@ -71,10 +71,10 @@ void setup()
     if ((currentTime - lastStatusUpdate) >= STATUS_UPDATE_TIME)
     {
       // Transmit Hot Tub hardware status
-      // transmitDataStructure();
+      sendHotTubStatus();
 
       // signal to user that hot tub data packet sent
-      // toggleLED();
+      toggleLED();
 
       // Reset the status update loop counter
       lastStatusUpdate = millis();
@@ -86,19 +86,12 @@ void setup()
       // Read the temperature from the MAX6675
       hotTub.currentTemp = thermocouple1.readFahrenheit();
 
-      // Print the temperature to the serial monitor
-      Serial.print("Temperature: ");
-      Serial.print(hotTub.currentTemp);
-      Serial.println(" °F");
-      Serial.println("\n\n");
-
-      sendHotTubStatus();
-
-      if (Serial1.available() > 0)
-      {
-        char c = Serial1.read();
-        Serial2.write(c);
-      }
+ 
+      // if (Serial1.available() > 0)
+      // {
+      //   char c = Serial1.read();
+      //   Serial2.write(c);
+      // }
 
       // // Test UART communication
       // while (Serial1.available() > 0) {
@@ -107,23 +100,18 @@ void setup()
 
       // }
 
-      while (Serial2.available() > 0)
-      {
-        char c = Serial2.read();
-        Serial.write(c);
-      }
-
-      // Toggle the LED
-      toggleLED();
-
-      Serial1.println("count = " + String(count));
-
-      count++;
+      // while (Serial2.available() > 0)
+      // {
+      //   char c = Serial2.read();
+      //   Serial.write(c);
+      // }
 
       // Reset the thermocouple read loop counter
       lastReadUpdate = millis();
     }
   }
+
+
 
   void toggleLED()
   {
@@ -132,28 +120,146 @@ void setup()
     digitalWrite(LED_Pin, ledState); // Set the LED to the new state
   }
 
+
+  /**
+   * @brief Function to send the current hot tub status over UARTS
+   * 
+   */
   void sendHotTubStatus()
   {
     // Create a JSON object to store the status data
-    // StaticJsonDocument<200> doc;
     JsonDocument doc;
 
-    // Add the temperature data to the JSON object
-    // doc["temperature"] = thermocouple1.readFahrenheit();
+    // Buffer to hold the formatted temperature string
+    char tempStr[10];
+    
+    // Convert float to string with 1 decimal place
+    dtostrf(hotTub.currentTemp, 4, 1, tempStr); 
 
-
-    doc["temp"] = hotTub.currentTemp;
+    doc["temp"] = tempStr;
     doc["sTemp"] = hotTub.setTemp;
     doc["heat"] = hotTub.HeaterOn;
     doc["pLo"] = hotTub.pumpLowSpeedOn;
     doc["pHi"] = hotTub.pumpHighSpeedOn;
   
-  
-
     // Serialize the JSON object to a string
     String output;
     serializeJson(doc, output);
 
     // Transmit the JSON string over Serial
     Serial.println(output);
+    Serial1.println(output);
+    Serial2.println(output);
   }
+
+
+
+void checkForSerialRxMsgReady() {
+  // Check for data on Serial1
+  if (hotTub.Serial1RxMsgReady) {
+
+    // Reset the flag
+    hotTub.Serial1RxMsgReady = false;
+  }
+
+}
+
+
+void updateHotTubStatus(char * msg)
+{
+  JsonDocument doc;
+  deserializeJson(doc, msg);
+
+  if (doc.containsKey("temp")) {
+    hotTub.currentTemp = doc["temp"];
+  }
+
+  if (doc.containsKey("sTemp")) {
+    hotTub.setTemp = doc["sTemp"];
+  }
+
+  if (doc.containsKey("heat")) {
+    hotTub.HeaterOn = doc["heat"];
+  }
+
+  if (doc.containsKey("pLo")) {
+    hotTub.pumpLowSpeedOn = doc["pLo"];
+  }
+
+  if (doc.containsKey("pHi")) {
+    hotTub.pumpHighSpeedOn = doc["pHi"];
+  }
+}
+
+
+// const char* sensor = doc["sensor"];
+// long time          = doc["time"];
+// double latitude    = doc["data"][0];
+// double longitude   = doc["data"][1];
+
+
+
+// // Serial1 Variables
+// uint8_t Serial1TxMsg[MAX_BUFFER_SIZE];
+// uint8_t Serial1RxMsg[MAX_BUFFER_SIZE];
+// int Serial1TxMsgLength = 0;
+// int Serial1RxMsgLength = 0;
+// bool Serial1TxMsgReady = false;
+// bool Serial1RxMsgReady = false;
+
+/**
+ * @brief Function to check for incoming serial data on all UARTS
+ * 
+ */
+void checkForSerialData() {
+  // Check for data on Serial1
+  if (Serial1.available() > 0) {
+    while (Serial1.available() > 0) {
+      char c = Serial1.read();
+      if (hotTub.Serial1RxMsgLength < MAX_BUFFER_SIZE) {
+        hotTub.Serial1RxMsg[hotTub.Serial1RxMsgLength++] = c;
+      } else {
+        // Handle overflow, e.g., reset the buffer or discard the item
+      }
+      // Check for the end of the message (newline character)
+      if (c == '\n') {
+        hotTub.Serial1RxMsgReady = true;
+        break;
+      }
+    }
+  }
+
+  // Check for data on Serial2
+  if (Serial2.available() > 0) {
+    while (Serial2.available() > 0) {
+      char c = Serial2.read();
+      if (hotTub.Serial2RxMsgLength < MAX_BUFFER_SIZE) {
+        hotTub.Serial2RxMsg[hotTub.Serial2RxMsgLength++] = c;
+      } else {
+        // Handle overflow, e.g., reset the buffer or discard the item
+      }
+      // Check for the end of the message (newline character)
+      if (c == '\n') {
+        hotTub.Serial2RxMsgReady = true;
+        break;
+      }
+    }
+  }
+
+  // Check for data on Serial
+  if (Serial.available() > 0) {
+    while (Serial.available() > 0) {
+      char c = Serial.read();
+      if (hotTub.SerialRxMsgLength < MAX_BUFFER_SIZE) {
+        hotTub.SerialRxMsg[hotTub.SerialRxMsgLength++] = c;
+      } else {
+        // Handle overflow, e.g., reset the buffer or discard the item
+      }
+      // Check for the end of the message (newline character)
+      if (c == '\n') {
+        hotTub.SerialRxMsgReady = true;
+        break;
+      }
+    }
+  }
+} // end of checkForSerialData() function

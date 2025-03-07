@@ -4,10 +4,6 @@
 #include <ArduinoJson.h>
 #include <pid.h>
 
-// #include <SPI.h>
-// #include <ArdunoJson.h>
-
-
 #define BAUDRATE 57600
 
 // Hot Tub Min and Max Temperature range
@@ -32,6 +28,31 @@ static struct HotTubStruct {
   bool HeaterOn = false;
   bool pumpLowSpeedOn = false;
   bool pumpHighSpeedOn = false;
+
+  // Serial USB Variables
+  uint8_t SerialTxMsg[MAX_BUFFER_SIZE];
+  uint8_t SerialRxMsg[MAX_BUFFER_SIZE];
+  int SerialTxMsgLength = 0;
+  int SerialRxMsgLength = 0;
+  bool SerialTxMsgReady = false;
+  bool SerialRxMsgReady = false;
+  
+    // Serial1 Variables
+  uint8_t Serial1TxMsg[MAX_BUFFER_SIZE];
+  uint8_t Serial1RxMsg[MAX_BUFFER_SIZE];
+  int Serial1TxMsgLength = 0;
+  int Serial1RxMsgLength = 0;
+  bool Serial1TxMsgReady = false;
+  bool Serial1RxMsgReady = false;
+  
+  // Serial2 Variables
+  uint8_t Serial2TxMsg[MAX_BUFFER_SIZE];
+  uint8_t Serial2RxMsg[MAX_BUFFER_SIZE];
+  int Serial2TxMsgLength = 0;
+  int Serial2RxMsgLength = 0;
+  bool Serial2TxMsgReady = false;
+  bool Serial2RxMsgReady = false;
+
   // Variable to signify temperature went below setpoint
   bool belowSetpoint = true;
   // Variable to signify temperature range window below setpoint
