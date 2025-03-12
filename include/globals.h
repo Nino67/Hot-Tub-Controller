@@ -16,5 +16,6 @@
 #define RELAY_3_Pin PB4
 #define RELAY_4_Pin PB5
 
+#define BAUDRATE 57600
 
 #endif // _GLOBALS_H_

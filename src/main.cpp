@@ -3,8 +3,32 @@
 // function declarations 
 void setup();
 void loop();
-void toggleLED();
-void sendHotTubStatus();
+void toggleLED(void);
+void sendHotTubStatus(void);
+void updateHotTubStatus(char*);
+
+void updatePumpStatus(HotTubStruct&);
+bool checkSerialForData(HotTubStruct&);
+bool checkSerial1ForData(HotTubStruct&);
+bool checkSerial2ForData(HotTubStruct&);
+bool checkIfHotTubUpdateReceived(HotTubStruct&);
+void runBasicTemperatureControl(HotTubStruct&);
+
+void heaterRelayOn(void);				    // Relay 1
+void heaterRelayOff(void);				  // Relay 1
+bool heaterRelayStatus(void);			  // Relay 1
+void pumpHighOn(void);					    // Relay 2
+void pumpHighOff(void);					    // Relay 2
+bool pumpHighStatus(void);				  // Relay 2
+void pumpLowOn(void);					      // Relay 3
+void pumpLowOff(void);					    // Relay 3
+bool pumpLowStatus(void);				    // Relay 3
+void Relay4on(void);						    // Relay 4
+void Relay4off(void);					      // Relay 4
+bool Relay4status (void);				    // Relay 4
+void RelaysAllOff(void);
+  
+
 
 // Define PID I/O Variables we'll be connecting to
 double Setpoint, Input, Output;
@@ -12,12 +36,6 @@ double Setpoint, Input, Output;
 // Specify the links and initial PID tuning parameters
 double Kp = 2, Ki = 5, Kd = 1;
 PID temperaturePID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
-
-// Define the pin numbers for the MAX6675
-// const int thermocouple1_CS = PB12;
-// const int thermocouple_CLK = PB13;
-// const int thermocouple_SO = PB14;
-// const int thermocouple2_CS = PB15;
 
 // Create an instance of the MAX6675 library
 MAX6675 thermocouple1(THERMO_CLK_Pin, THERMO_CS_1_Pin, THERMO_SO_Pin);
@@ -32,234 +50,584 @@ static uint32_t currentTime = 0;
 static uint32_t lastStatusUpdate = 0;
 static uint32_t lastReadUpdate = 0;
 
+
+/***************************************************************************/
+/**
+ * @brief   Function to setup the initial state of the system
+ *
+ */
 void setup()
 {
   // Initialize the LED pin as an output
   pinMode(LED_Pin, OUTPUT);
 
+  // Initialize the relay pins as outputs
+  pinMode(RELAY_1_Pin, OUTPUT);
+  pinMode(RELAY_2_Pin, OUTPUT);
+  pinMode(RELAY_3_Pin, OUTPUT);
+  pinMode(RELAY_4_Pin, OUTPUT);
+
+  // Set the relay pins to LOW (OFF)
+  digitalWrite(RELAY_1_Pin, LOW);
+  digitalWrite(RELAY_2_Pin, LOW);
+  digitalWrite(RELAY_3_Pin, LOW);
+  digitalWrite(RELAY_4_Pin, LOW);
+
+
   // Initialize SPI2
   SPI.begin();
 
   // Initialize UART1
-  Serial1.begin(9600); // Set the baud rate as needed
-
+  Serial1.begin(BAUDRATE); // Set the baud rate as needed
   // Initialize UART2
-  Serial2.begin(9600); // Set the baud rate as needed
-
+  Serial2.begin(BAUDRATE); // Set the baud rate as needed
   // Initialize USB serial communication for debugging
-  Serial.begin(9600);
+  Serial.begin(BAUDRATE);
 
-  // Wait for MAX6675 to stabilize
-  delay(500);
+  // delay a second for everything to stabalize
+  delay(1000);
 
-  // Test message
-  Serial1.println("Hello from UART1");
+} // end of setup() function
+/***************************************************************************/
+
+/***************************************************************************/
+/**
+ * @brief   Main loop function to run the hot tub controller
+ *
+ */
+void loop()
+{
+
+  // Serial2.println("{\"temp\":\"00.0\",\"sTemp\":66,\"heat\":false,\"pLo\":true,\"pHi\":true}\n");
+
+  // delay(1000);
 
   // Reset Main loop timing variables
   currentTime = millis();
   lastStatusUpdate = currentTime;
   lastReadUpdate = lastStatusUpdate;
-  }
 
-  void loop()
-  {
-
-    static int count = 0;
+  // Main endless loop
+  while (true) {
+    // Get the current time
     currentTime = millis();
 
     // Check if Status Update time elapsed (default 200ms)
-    if ((currentTime - lastStatusUpdate) >= STATUS_UPDATE_TIME)
-    {
+    if ((currentTime - lastStatusUpdate) >= STATUS_UPDATE_TIME) {
+      // Check if a update was received before hardware status sent
+      checkIfHotTubUpdateReceived(hotTub);
       // Transmit Hot Tub hardware status
       sendHotTubStatus();
-
+      // Update the Hardware status 
+      updatePumpStatus(hotTub);
+      // Run the basic temperature control algorithm
+      runBasicTemperatureControl(hotTub);
       // signal to user that hot tub data packet sent
       toggleLED();
-
       // Reset the status update loop counter
       lastStatusUpdate = millis();
-    }
+    } // end of if((currentTime - lastStatusUpdate) >= STATUS_UPDATE_TIME)
 
     // Check if thermocouple read time elapsed (default 500ms)
-    if ((currentTime - lastReadUpdate) >= READ_TIME_DELAY)
-    {
+    if ((currentTime - lastReadUpdate) >= READ_TIME_DELAY) {
       // Read the temperature from the MAX6675
       hotTub.currentTemp = thermocouple1.readFahrenheit();
-
- 
-      // if (Serial1.available() > 0)
-      // {
-      //   char c = Serial1.read();
-      //   Serial2.write(c);
-      // }
-
-      // // Test UART communication
-      // while (Serial1.available() > 0) {
-      //   char c = Serial1.read();
-      //   Serial2.write(c);
-
-      // }
-
-      // while (Serial2.available() > 0)
-      // {
-      //   char c = Serial2.read();
-      //   Serial.write(c);
-      // }
-
       // Reset the thermocouple read loop counter
       lastReadUpdate = millis();
-    }
-  }
+    } // end of if((currentTime - lastReadUpdate) >= READ_TIME_DELAY)
+  } // end of while endless loop
+} // end of loop() function
+/***************************************************************************/
 
 
+/***************************************************************************/
+/**
+ * @brief Function to check if a message was received from the hot tub 
+ * and update the status accordingly
+ * 
+ * @param hot_tub   The hot tub struct to store the incoming data
+ * @return true   If a message was received
+ * @return false  If a message was not received
+ */
+bool checkIfHotTubUpdateReceived(HotTubStruct &hot_tub)
+{
+  bool hotTubUpdateReceived = false;
 
-  void toggleLED()
-  {
-    static bool ledState = LOW;      // Keep track of the LED state
-    ledState = !ledState;            // Toggle the state
-    digitalWrite(LED_Pin, ledState); // Set the LED to the new state
-  }
+  // Check for incoming data on the USB_UART
+  if (checkSerialForData(hot_tub)) {
+    updateHotTubStatus((char *)hot_tub.SerialRxMsg);
+    // sendHotTubStatus();
+    hot_tub.SerialRxMsgLength = 0;
+    hot_tub.SerialRxMsgReady = false;
+    hotTubUpdateReceived = true;
+    return hotTubUpdateReceived;
+  } // end of if(checkSerialForData(hot_tub))
 
+  // Check for incoming data on Serial1
+  if (checkSerial1ForData(hot_tub)) {
+    updateHotTubStatus((char *)hot_tub.Serial1RxMsg);
+    // sendHotTubStatus();
+    hot_tub.Serial1RxMsgLength = 0;
+    hot_tub.Serial1RxMsgReady = false;
+    hotTubUpdateReceived = true;
+    return hotTubUpdateReceived;
+  } // end of if(checkSerial1ForData(hot_tub))
 
-  /**
-   * @brief Function to send the current hot tub status over UARTS
-   * 
-   */
-  void sendHotTubStatus()
-  {
-    // Create a JSON object to store the status data
-    JsonDocument doc;
-
-    // Buffer to hold the formatted temperature string
-    char tempStr[10];
-    
-    // Convert float to string with 1 decimal place
-    dtostrf(hotTub.currentTemp, 4, 1, tempStr); 
-
-    doc["temp"] = tempStr;
-    doc["sTemp"] = hotTub.setTemp;
-    doc["heat"] = hotTub.HeaterOn;
-    doc["pLo"] = hotTub.pumpLowSpeedOn;
-    doc["pHi"] = hotTub.pumpHighSpeedOn;
-  
-    // Serialize the JSON object to a string
-    String output;
-    serializeJson(doc, output);
-
-    // Transmit the JSON string over Serial
-    Serial.println(output);
-    Serial1.println(output);
-    Serial2.println(output);
-  }
-
-
-
-void checkForSerialRxMsgReady() {
-  // Check for data on Serial1
-  if (hotTub.Serial1RxMsgReady) {
-
-    // Reset the flag
-    hotTub.Serial1RxMsgReady = false;
-  }
-
-}
+  // Check for incoming data on Serial2
+  if (checkSerial2ForData(hot_tub)) {
+    updateHotTubStatus((char *)hot_tub.Serial2RxMsg);
+    // sendHotTubStatus();
+    hot_tub.Serial2RxMsgLength = 0;
+    hot_tub.Serial2RxMsgReady = false;
+    hotTubUpdateReceived = true;
+    return hotTubUpdateReceived;
+  } // end of if(checkSerial2ForData(hot_tub))
+  return hotTubUpdateReceived;
+} // end of checkIfHotTubUpdateReceived() function
+/***************************************************************************/
 
 
-void updateHotTubStatus(char * msg)
+/***************************************************************************/
+/**
+ * @brief  Function to toggle the LED on the board
+ *
+ */
+void toggleLED()
+{
+  static bool ledState = LOW;      // Keep track of the LED state
+  ledState = !ledState;            // Toggle the state
+  digitalWrite(LED_Pin, ledState); // Set the LED to the new state
+} // end of toggleLED() function
+/***************************************************************************/
+
+
+/***************************************************************************/
+/**
+ * @brief Function to send the current hot tub status over UARTS
+ *
+ */
+void sendHotTubStatus()
+{
+  // Create a JSON object to store the status data
+  JsonDocument doc;
+
+  // Buffer to hold the formatted temperature string
+  char tempStr[10];
+
+  // Convert float to string with 1 decimal place
+  dtostrf(hotTub.currentTemp, 4, 1, tempStr);
+
+  doc["temp"] = tempStr;
+  doc["sTemp"] = hotTub.setTemp;
+  doc["heat"] = hotTub.HeaterOn;
+  doc["pLo"] = hotTub.pumpLowSpeedOn;
+  doc["pHi"] = hotTub.pumpHighSpeedOn;
+
+  // Serialize the JSON object to a string
+  String output;
+  serializeJson(doc, output);
+
+  // Transmit the JSON string over Serial
+  Serial.println(output);
+  Serial1.println(output);
+  Serial2.println(output);
+} // end of sendHotTubStatus() function
+/***************************************************************************/
+
+
+/***************************************************************************/
+/**
+ * @brief  Function to update the hot tub status based on the incoming message
+ *
+ * @param msg The incoming Json message used to update the hot tub status
+ */
+void updateHotTubStatus(char *msg)
 {
   JsonDocument doc;
   deserializeJson(doc, msg);
 
-  if (doc.containsKey("temp")) {
-    hotTub.currentTemp = doc["temp"];
+  if (doc["temp"].is<float>()) {
+    // Convert the string representation of the float to a float
+    float tempValue = doc["temp"].as<float>();
+    // Buffer to hold the formatted temperature string
+    char tempStr[10];
+    // copy the recieved variable to the buffer
+    strcpy(tempStr, doc["temp"]);
+    // Convert float to string with 1 decimal place
+    dtostrf(tempValue, 4, 1, tempStr);
+    // Update the hotTub struct with the formatted float value
+    hotTub.currentTemp = atof(tempStr);
   }
 
-  if (doc.containsKey("sTemp")) {
+  if (doc["sTemp"].is<int>()) {
     hotTub.setTemp = doc["sTemp"];
   }
 
-  if (doc.containsKey("heat")) {
+  if (doc["heat"].is<bool>()) {
     hotTub.HeaterOn = doc["heat"];
   }
 
-  if (doc.containsKey("pLo")) {
+  if (doc["pLo"].is<bool>()) {
     hotTub.pumpLowSpeedOn = doc["pLo"];
   }
 
-  if (doc.containsKey("pHi")) {
+  if (doc["pHi"].is<bool>()) {
     hotTub.pumpHighSpeedOn = doc["pHi"];
   }
-}
-
-
-// const char* sensor = doc["sensor"];
-// long time          = doc["time"];
-// double latitude    = doc["data"][0];
-// double longitude   = doc["data"][1];
-
-
-
-// // Serial1 Variables
-// uint8_t Serial1TxMsg[MAX_BUFFER_SIZE];
-// uint8_t Serial1RxMsg[MAX_BUFFER_SIZE];
-// int Serial1TxMsgLength = 0;
-// int Serial1RxMsgLength = 0;
-// bool Serial1TxMsgReady = false;
-// bool Serial1RxMsgReady = false;
+} // end of updateHotTubStatus() function
+/***************************************************************************/
 
 /**
- * @brief Function to check for incoming serial data on all UARTS
+ * @brief  Function to update the pump status based on the current Hot Tub struct
+ * 
+ * @param hot_tub   The hot tub struct data to update pump status 
+ */
+void updatePumpStatus(HotTubStruct &hot_tub) {
+  // Check to see if the heater status has changed
+  if (hot_tub.pumpLowSpeedOn != pumpLowStatus()) {
+    // If the pumpLowSpeedOn is true and the low speed pump relay is off
+    if (hot_tub.pumpLowSpeedOn) {
+      // Turn off the high speed pump
+      pumpHighOff();
+      // Turn on the low speed pump
+      pumpLowOn();
+    } else {
+      // Turn off the low speed pump
+      pumpLowOff();
+    }
+  } // end of if(hot_tub.pumpLowSpeedOn != pumpLowStatus())
+  
+  // Check to see if the high speed pump status has changed
+  if (hot_tub.pumpHighSpeedOn != pumpHighStatus()) {
+    // If the pumpHighSpeedOn is true and the high speed pump relay is off
+    if (hot_tub.pumpHighSpeedOn) {
+      // Turn off the low speed pump
+      pumpLowOff();
+      // Turn on the high speed pump  
+      pumpHighOn();
+    } else {
+      // Turn off the high speed pump
+      pumpHighOff();
+    } // end of if(hot_tub.pumpHighSpeedOn != pumpHighStatus())
+  } // end of if(hot_tub.pumpHighSpeedOn != pumpHighStatus())
+} // end of updatePumpStatus() function
+/***************************************************************************/
+
+
+/******************************************************************************************************************/
+/**
+ * @brief runBasicTemperatureControl()
+ * @param hot_Tub   The hot tub struct to store the incoming data
+ * @retval None
+ */
+void runBasicTemperatureControl(HotTubStruct &hot_tub)
+{
+  // If temperature reading is out of range set heater off and return (safety check)
+  if((hot_tub.currentTemp > MIN_ALLOWED_TEMP) && (hot_tub.currentTemp < MAX_ALLOWED_TEMP))
+  {
+    
+    // Check if the user requested the heater on
+    if (hot_tub.HeaterOn) 
+    {
+      // Check to see if temperature is above the user setpoint
+      if(hot_tub.currentTemp > hot_tub.setTemp)
+      {
+        // Set belowSetpoint flag to false to indicate above setpoint
+        hot_tub.belowSetpoint = false;
+        // Turn off the heater relay
+        heaterRelayOff();
+        // Check if pump is under user control if not turn off the low speed pump
+        if (!(hot_tub.pumpHighSpeedOn || hot_tub.pumpLowSpeedOn))
+        {
+          // Turn off the low speed pump under heater control
+          pumpLowOff();
+        } // end of if(!(hot_tub.pumpHighSpeedOn || hot_tub.pumpLowSpeedOn))
+      } // end of if(hot_tub.currentTemp > hot_tub.setTemp)
+      
+
+      // Check to see if temperature is below (setpoint - hysterisis) 
+      // if yes set flag for heater turn on
+      if(hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis))
+      {
+        // Set belowSetpoint flag to true
+        hotTub.belowSetpoint = true;
+      } // end of if(hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis))
+      
+
+      // Check to see if belowSetpoint is true and temperature is below setpoint - hysterisis
+      if(hot_tub.belowSetpoint && (hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis)))
+      {
+        if(hot_tub.pumpHighSpeedOn || hot_tub.pumpLowSpeedOn) 
+        {
+          if(hot_tub.pumpHighSpeedOn)
+          {
+            // Turn on the high speed pump
+            pumpHighOn();
+          }
+          else
+          {
+            // Turn on the low speed pump
+            pumpLowOn();
+          } // end of if(hot_tub.pumpHighSpeedOn)
+          // Turn on the heater relay
+          heaterRelayOn();
+        }
+        else 
+        {
+          // Turn on the low speed pump
+          pumpLowOn();
+          // Turn on the heater relay
+          heaterRelayOn();
+        } // end of if(hot_tub.pumpHighSpeedOn || hot_tub.pumpLowSpeedOn)
+      
+      } // end of if(hot_tub.belowSetpoint && (hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis)))
+    } // end of if (hot_tub.HeaterOn) 
+  }
+  else
+  {
+	  // Out of range temperature shut down heater and return
+	  hot_tub.HeaterOn = false;
+	  heaterRelayOff();
+  }
+} // end of runBasicTemperatureControl() function
+/******************************************************************************************************************/
+
+
+
+
+/***************************************************************************/
+/**
+ * @brief Function to check for incoming serial data on USB_UART
+ *
+ * @param hot_tub  The hot tub struct to store the incoming data
+ * @return true  If a message is ready
+ * @return false  If a message is not ready
+ */
+bool checkSerialForData(HotTubStruct &hot_tub)
+{
+  while (Serial.available() > 0)
+  {
+    char c = Serial.read();
+    if (hot_tub.SerialRxMsgLength < MAX_BUFFER_SIZE)
+    {
+      hot_tub.SerialRxMsg[hot_tub.SerialRxMsgLength++] = c;
+    }
+    else
+    {
+      // Handle overflow, reset the buffer, flush the uart and reset msg flag
+      Serial.flush();
+      hot_tub.SerialRxMsgLength = 0;
+      hot_tub.SerialRxMsgReady = false;
+    }
+    // Check for the end of the message (newline character)
+    if (c == '\n')
+    {
+      hot_tub.SerialRxMsgReady = true;
+      break;
+    }
+  } // end of while loop
+  return hot_tub.SerialRxMsgReady;
+} // end of checkSerialForData() function
+/***************************************************************************/
+
+
+/***************************************************************************/
+/**
+ * @brief   Function to check for incoming serial data on Serial1
+ * 
+ * @param hot_tub   The hot tub struct to store the incoming data
+ * @return true   If a message is ready 
+ * @return false  If a message is not ready
+ */
+bool checkSerial1ForData(HotTubStruct &hot_tub)
+{
+  while (Serial1.available() > 0)
+  {
+    char c = Serial1.read();
+    if (hot_tub.Serial1RxMsgLength < MAX_BUFFER_SIZE)
+    {
+      hot_tub.Serial1RxMsg[hot_tub.Serial1RxMsgLength++] = c;
+    }
+    else
+    {
+      // Handle overflow, reset the buffer, flush the uart and reset msg flag
+      Serial1.flush();
+      hot_tub.Serial1RxMsgLength = 0;
+      hot_tub.Serial1RxMsgReady = false;
+    }
+    // Check for the end of the message (newline character)
+    if (c == '\n')
+    {
+      hot_tub.Serial1RxMsgReady = true;
+      break;
+    }
+  } // end of while loop
+  return hot_tub.Serial1RxMsgReady;
+} // end of checkSerial1ForData() function
+/***************************************************************************/
+
+
+/***************************************************************************/
+/**
+ * @brief  Function to check for incoming serial data on Serial2
+ *
+ * @param hot_tub The hot tub struct to store the incoming data
+ * @return true If a message is ready
+ * @return false  If a message is not ready
+ */
+bool checkSerial2ForData(HotTubStruct &hot_tub)
+{
+  while (Serial2.available() > 0)
+  {
+    char c = Serial2.read();
+    if (hot_tub.Serial2RxMsgLength < MAX_BUFFER_SIZE)
+    {
+      hot_tub.Serial2RxMsg[hot_tub.Serial2RxMsgLength++] = c;
+    }
+    else
+    {
+      // Handle overflow, reset the buffer, flush the uart and reset msg flag
+      Serial2.flush();
+      hot_tub.Serial2RxMsgLength = 0;
+      hot_tub.Serial2RxMsgReady = false;
+    }
+    // Check for the end of the message (newline character)
+    if (c == '\n')
+    {
+      hot_tub.Serial2RxMsgReady = true;
+      break;
+    }
+  } // end of while loop
+  return hot_tub.Serial2RxMsgReady;
+} // end of checkSerial2ForData() function
+/***************************************************************************/
+
+
+
+
+
+
+/**
+ * @brief   Function to turn on the heater relay
  * 
  */
-void checkForSerialData() {
-  // Check for data on Serial1
-  if (Serial1.available() > 0) {
-    while (Serial1.available() > 0) {
-      char c = Serial1.read();
-      if (hotTub.Serial1RxMsgLength < MAX_BUFFER_SIZE) {
-        hotTub.Serial1RxMsg[hotTub.Serial1RxMsgLength++] = c;
-      } else {
-        // Handle overflow, e.g., reset the buffer or discard the item
-      }
-      // Check for the end of the message (newline character)
-      if (c == '\n') {
-        hotTub.Serial1RxMsgReady = true;
-        break;
-      }
-    }
-  }
+void heaterRelayOn(void) {
+  digitalWrite(RELAY_1_Pin, HIGH);
+} // end of heaterRelayOn() function
+/******************************************************************************************************************/
 
-  // Check for data on Serial2
-  if (Serial2.available() > 0) {
-    while (Serial2.available() > 0) {
-      char c = Serial2.read();
-      if (hotTub.Serial2RxMsgLength < MAX_BUFFER_SIZE) {
-        hotTub.Serial2RxMsg[hotTub.Serial2RxMsgLength++] = c;
-      } else {
-        // Handle overflow, e.g., reset the buffer or discard the item
-      }
-      // Check for the end of the message (newline character)
-      if (c == '\n') {
-        hotTub.Serial2RxMsgReady = true;
-        break;
-      }
-    }
-  }
+/**
+ * @brief   Function to turn off the heater relay
+ * 
+ */
+void heaterRelayOff(void) {
+  digitalWrite(RELAY_1_Pin, LOW);
+} 
 
-  // Check for data on Serial
-  if (Serial.available() > 0) {
-    while (Serial.available() > 0) {
-      char c = Serial.read();
-      if (hotTub.SerialRxMsgLength < MAX_BUFFER_SIZE) {
-        hotTub.SerialRxMsg[hotTub.SerialRxMsgLength++] = c;
-      } else {
-        // Handle overflow, e.g., reset the buffer or discard the item
-      }
-      // Check for the end of the message (newline character)
-      if (c == '\n') {
-        hotTub.SerialRxMsgReady = true;
-        break;
-      }
-    }
-  }
-} // end of checkForSerialData() function
+bool heaterRelayStatus(void) {
+  return digitalRead(RELAY_1_Pin);
+} // end of heaterRelayStatus() function
+/******************************************************************************************************************/ 
+
+/**
+ * @brief   Function to turn on the high speed pump relay
+ * 
+ */
+void pumpHighOn(void) {
+  digitalWrite(RELAY_2_Pin, HIGH);
+} // end of pumpHighOn() function
+/******************************************************************************************************************/ 
+
+/**
+ * @brief   Function to turn off the high speed pump relay
+ * 
+ */
+void pumpHighOff(void) {
+  digitalWrite(RELAY_2_Pin, LOW);
+} // end of pumpHighOff() function
+/******************************************************************************************************************/
+
+/**
+ * @brief   Function to check the status of the high speed pump relay
+ * 
+ * @return true   If the relay is on
+ * @return false  If the relay is off
+ */
+bool pumpHighStatus(void) {
+  return digitalRead(RELAY_2_Pin) == HIGH;
+} // end of pumpHighStatus() function  
+/******************************************************************************************************************/
+
+/**
+ * @brief   Function to turn on the low speed pump relay
+ * 
+ */
+void pumpLowOn(void) {
+  digitalWrite(RELAY_3_Pin, HIGH);
+} // end of pumpLowOn() function
+/******************************************************************************************************************/
+
+/**
+ * @brief   Function to turn off the low speed pump relay
+ * 
+ */
+void pumpLowOff(void) {
+  digitalWrite(RELAY_3_Pin, LOW);
+} // end of pumpLowOff() function
+/******************************************************************************************************************/
+
+/**
+ * @brief   Function to check the status of the low speed pump relay
+ * 
+ * @return true   If the relay is on
+ * @return false  If the relay is off
+ */
+bool pumpLowStatus(void) {
+  return digitalRead(RELAY_3_Pin) == HIGH;
+} // end of pumpLowStatus() function
+/******************************************************************************************************************/
+
+/**
+ * @brief   Function to turn on the relay 4
+ * 
+ */
+void Relay4on(void) {
+  digitalWrite(RELAY_4_Pin, HIGH);
+} // end of Relay4on() function
+/******************************************************************************************************************/
+
+/**
+ * @brief   Function to turn off the relay 4
+ * 
+ */
+void Relay4off(void) {
+  digitalWrite(RELAY_4_Pin, LOW);
+} // end of Relay4off() function
+/******************************************************************************************************************/ 
+
+/**
+ * @brief   Function to check the status of relay 4
+ * 
+ * @return true   If the relay is on
+ * @return false  If the relay is off
+ */
+bool Relay4status (void) {
+  return digitalRead(RELAY_4_Pin) == HIGH;
+} // end of Relay4status() function
+/******************************************************************************************************************/
+
+/**
+ * @brief   Function to turn off all the relays
+ * 
+ */
+void RelaysAllOff(void) {
+  digitalWrite(RELAY_1_Pin, LOW);
+  digitalWrite(RELAY_2_Pin, LOW);
+  digitalWrite(RELAY_3_Pin, LOW);
+  digitalWrite(RELAY_4_Pin, LOW);
+} // end of RelaysAllOff() function
+/******************************************************************************************************************/
+
+
+
+

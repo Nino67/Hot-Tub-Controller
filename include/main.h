@@ -4,8 +4,6 @@
 #include <ArduinoJson.h>
 #include <pid.h>
 
-#define BAUDRATE 57600
-
 // Hot Tub Min and Max Temperature range
 #define MAX_ALLOWED_TEMP 45
 #define MIN_ALLOWED_TEMP 0
