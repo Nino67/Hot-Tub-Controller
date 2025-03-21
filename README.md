@@ -63,8 +63,8 @@ The controller communicates status updates approximately five times a second to 
 2.  **Install PlatformIO IDE:** Install the PlatformIO IDE extension in Visual Studio Code.
 3.  **Clone the Project:** Clone the project from the repository (if applicable).
     ```git
-    git clone <repository_url>
-    cd <project_directory>
+    git clone https://github.com/Nino67/Hot-Tub-Controller.git
+    cd HotTub-2025-05-03
     ```
 4.  **Install Arduino Libraries:** PlatformIO will automatically install the required libraries defined in [`platformio.ini`](platformio.ini).
 5.  **Configure PlatformIO:**
