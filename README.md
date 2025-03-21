@@ -175,6 +175,6 @@ Unless attributed otherwise, everything in this repository is under the MIT Lice
 
 ## Addendum
 
-- Yes I was forced to build this, blame [Roland]().
-- Yes [Roland]() does not feed his slaves, or give lunch breaks.
+- Yes I was forced to build this, blame <span style="color: red;">Roland</span>.
+- Yes <span style="color: red;">Roland</span> does not feed his slaves, or give lunch breaks.
 - Mark my words, one day I will get that which is owed, the other half of the sandwhich... heheh
