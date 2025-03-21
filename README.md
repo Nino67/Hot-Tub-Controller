@@ -2,7 +2,10 @@
 
 ## Overview
 
-This project provides automatic temperature control and auto or manual pump control for a hot tub. It uses an STM32 Blue Pill microcontroller to manage temperature regulation, pump activation, and status communication.
+- This project provides automatic temperature control and auto or manual pump control for a hot tub. It uses an STM32 Blue Pill microcontroller to manage temperature regulation, pump activation, and status communication.
+
+- [Hot Tub Controller Image 1:](images/HotTub-Controller-1.png)
+- [Hot Tub Controller Image 2:](images/HotTub-Controller-2.png)
 
 ### Description
 
