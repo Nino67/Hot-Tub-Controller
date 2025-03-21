@@ -64,7 +64,7 @@ The controller communicates status updates approximately five times a second to 
 3.  **Clone the Project:** Clone the project from the repository (if applicable).
     ```git
     git clone https://github.com/Nino67/Hot-Tub-Controller.git
-    cd HotTub-2025-05-03
+    cd Hot-Tub-Controller
     ```
 4.  **Install Arduino Libraries:** PlatformIO will automatically install the required libraries defined in [`platformio.ini`](platformio.ini).
 5.  **Configure PlatformIO:**
