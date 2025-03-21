@@ -54,7 +54,7 @@ bool checkSerial2ForData(HotTubStruct&);
 bool checkIfHotTubUpdateReceived(HotTubStruct&);
 void runBasicTemperatureControl(HotTubStruct&);
 
-void heaterRelayOn(void);				    // Relay 1
+void heaterRelayOn(void);           // Relay 1
 void heaterRelayOff(void);				  // Relay 1
 bool heaterRelayStatus(void);			  // Relay 1
 void pumpHighOn(void);					    // Relay 2
