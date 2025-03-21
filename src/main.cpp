@@ -1,6 +1,46 @@
-#include "main.h"
+/**************************************************************************/
+/**************************************************************************/
+/**
+ * @file main.cpp
+ * @brief This file contains the main application logic 
+ *        for the Hot Tub Controller.
+ *
+ * @author Gaetano (Nino) Ricca. 
+ *                 email gricca1967@gmail.com  
+ * @version 1.1.0
+ * @date 2021-09-30
+ *  
+ * The Hot Tub Controller is designed to manage and monitor various 
+ * aspects of a hot tub, including temperature regulation, pump control, 
+ * and status communication.
+ *
+ * Key functionalities include:
+ *   - Reading temperature from MAX6675 thermocouples.
+ *   - Controlling relays for heater and pump activation.
+ *   - Implementing a basic temperature control algorithm.
+ *   - Communicating status and receiving commands via UART serial ports
+ *      (Serial, Serial1, Serial2).
+ *   - Handling incoming JSON messages to update hot tub settings.
+ *   - Providing safety mechanisms such as temperature range checks.
+ *
+ * The code is structured with clear function declarations and 
+ * comments to facilitate understanding and maintenance. It utilizes 
+ * the Arduino framework for STM32 microcontrollers.
+ */
+/**************************************************************************/
+/**************************************************************************/
 
-// function declarations 
+
+/**************************************************************************/
+/**** Include Files *******************************************************/
+/**************************************************************************/
+#include "main.h"
+/**************************************************************************/
+
+
+/**************************************************************************/
+/**** Function Declarations ***********************************************/
+/**************************************************************************/
 void setup();
 void loop();
 void toggleLED(void);
@@ -27,9 +67,12 @@ void Relay4on(void);						    // Relay 4
 void Relay4off(void);					      // Relay 4
 bool Relay4status (void);				    // Relay 4
 void RelaysAllOff(void);
-  
+/**************************************************************************/
 
 
+/**************************************************************************/
+/**** Global and Constant Declarations ************************************/
+/**************************************************************************/
 // Define PID I/O Variables we'll be connecting to
 double Setpoint, Input, Output;
 
@@ -49,6 +92,7 @@ HardwareSerial Serial1(PA10, PA9); // RX, TX for USART1
 static uint32_t currentTime = 0;
 static uint32_t lastStatusUpdate = 0;
 static uint32_t lastReadUpdate = 0;
+/**************************************************************************/
 
 
 /***************************************************************************/
@@ -90,6 +134,7 @@ void setup()
 } // end of setup() function
 /***************************************************************************/
 
+
 /***************************************************************************/
 /**
  * @brief   Main loop function to run the hot tub controller
@@ -97,11 +142,6 @@ void setup()
  */
 void loop()
 {
-
-  // Serial2.println("{\"temp\":\"00.0\",\"sTemp\":66,\"heat\":false,\"pLo\":true,\"pHi\":true}\n");
-
-  // delay(1000);
-
   // Reset Main loop timing variables
   currentTime = millis();
   lastStatusUpdate = currentTime;
@@ -246,6 +286,7 @@ void updateHotTubStatus(char *msg)
   JsonDocument doc;
   deserializeJson(doc, msg);
 
+  // Check if the temperature is a float
   if (doc["temp"].is<float>()) {
     // Convert the string representation of the float to a float
     float tempValue = doc["temp"].as<float>();
@@ -259,19 +300,27 @@ void updateHotTubStatus(char *msg)
     hotTub.currentTemp = atof(tempStr);
   }
 
+  // Check if the set temperature is an integer
   if (doc["sTemp"].is<int>()) {
+    // Update the hotTub struct with the set temperature
     hotTub.setTemp = doc["sTemp"];
   }
 
+  // Check if the heater status is a boolean
   if (doc["heat"].is<bool>()) {
+    // Update the hotTub struct with the heater status
     hotTub.HeaterOn = doc["heat"];
   }
 
+  // Check if the low speed pump status is a boolean
   if (doc["pLo"].is<bool>()) {
+    // Update the hotTub struct with the low speed pump status
     hotTub.pumpLowSpeedOn = doc["pLo"];
   }
 
+  // Check if the high speed pump status is a boolean
   if (doc["pHi"].is<bool>()) {
+    // Update the hotTub struct with the high speed pump status
     hotTub.pumpHighSpeedOn = doc["pHi"];
   }
 } // end of updateHotTubStatus() function
@@ -314,7 +363,7 @@ void updatePumpStatus(HotTubStruct &hot_tub) {
 /***************************************************************************/
 
 
-/******************************************************************************************************************/
+/***************************************************************************/
 /**
  * @brief runBasicTemperatureControl()
  * @param hot_Tub   The hot tub struct to store the incoming data
@@ -344,7 +393,6 @@ void runBasicTemperatureControl(HotTubStruct &hot_tub)
         } // end of if(!(hot_tub.pumpHighSpeedOn || hot_tub.pumpLowSpeedOn))
       } // end of if(hot_tub.currentTemp > hot_tub.setTemp)
       
-
       // Check to see if temperature is below (setpoint - hysterisis) 
       // if yes set flag for heater turn on
       if(hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis))
@@ -352,13 +400,13 @@ void runBasicTemperatureControl(HotTubStruct &hot_tub)
         // Set belowSetpoint flag to true
         hotTub.belowSetpoint = true;
       } // end of if(hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis))
-      
 
       // Check to see if belowSetpoint is true and temperature is below setpoint - hysterisis
       if(hot_tub.belowSetpoint && (hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis)))
       {
         if(hot_tub.pumpHighSpeedOn || hot_tub.pumpLowSpeedOn) 
         {
+          // Check if the high speed pump is on
           if(hot_tub.pumpHighSpeedOn)
           {
             // Turn on the high speed pump
@@ -379,7 +427,6 @@ void runBasicTemperatureControl(HotTubStruct &hot_tub)
           // Turn on the heater relay
           heaterRelayOn();
         } // end of if(hot_tub.pumpHighSpeedOn || hot_tub.pumpLowSpeedOn)
-      
       } // end of if(hot_tub.belowSetpoint && (hot_tub.currentTemp < (hot_tub.setTemp - hot_tub.hysterisis)))
     } // end of if (hot_tub.HeaterOn) 
   }
@@ -390,9 +437,7 @@ void runBasicTemperatureControl(HotTubStruct &hot_tub)
 	  heaterRelayOff();
   }
 } // end of runBasicTemperatureControl() function
-/******************************************************************************************************************/
-
-
+/***************************************************************************/
 
 
 /***************************************************************************/
@@ -503,10 +548,6 @@ bool checkSerial2ForData(HotTubStruct &hot_tub)
 /***************************************************************************/
 
 
-
-
-
-
 /**
  * @brief   Function to turn on the heater relay
  * 
@@ -514,21 +555,34 @@ bool checkSerial2ForData(HotTubStruct &hot_tub)
 void heaterRelayOn(void) {
   digitalWrite(RELAY_1_Pin, HIGH);
 } // end of heaterRelayOn() function
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn off the heater relay
  * 
  */
 void heaterRelayOff(void) {
   digitalWrite(RELAY_1_Pin, LOW);
-} 
+}  
+/**************************************************************************/
 
+
+/**************************************************************************/
+/**
+ * @brief  Function to check the status of the heater relay
+ * 
+ * @return true  If the relay is on  
+ * @return false If the relay is off
+ */
 bool heaterRelayStatus(void) {
-  return digitalRead(RELAY_1_Pin);
+  return digitalRead(RELAY_1_Pin) == HIGH;
 } // end of heaterRelayStatus() function
-/******************************************************************************************************************/ 
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn on the high speed pump relay
  * 
@@ -536,8 +590,10 @@ bool heaterRelayStatus(void) {
 void pumpHighOn(void) {
   digitalWrite(RELAY_2_Pin, HIGH);
 } // end of pumpHighOn() function
-/******************************************************************************************************************/ 
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn off the high speed pump relay
  * 
@@ -545,8 +601,10 @@ void pumpHighOn(void) {
 void pumpHighOff(void) {
   digitalWrite(RELAY_2_Pin, LOW);
 } // end of pumpHighOff() function
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to check the status of the high speed pump relay
  * 
@@ -556,8 +614,10 @@ void pumpHighOff(void) {
 bool pumpHighStatus(void) {
   return digitalRead(RELAY_2_Pin) == HIGH;
 } // end of pumpHighStatus() function  
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn on the low speed pump relay
  * 
@@ -565,8 +625,10 @@ bool pumpHighStatus(void) {
 void pumpLowOn(void) {
   digitalWrite(RELAY_3_Pin, HIGH);
 } // end of pumpLowOn() function
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn off the low speed pump relay
  * 
@@ -574,8 +636,10 @@ void pumpLowOn(void) {
 void pumpLowOff(void) {
   digitalWrite(RELAY_3_Pin, LOW);
 } // end of pumpLowOff() function
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to check the status of the low speed pump relay
  * 
@@ -585,8 +649,10 @@ void pumpLowOff(void) {
 bool pumpLowStatus(void) {
   return digitalRead(RELAY_3_Pin) == HIGH;
 } // end of pumpLowStatus() function
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn on the relay 4
  * 
@@ -594,8 +660,10 @@ bool pumpLowStatus(void) {
 void Relay4on(void) {
   digitalWrite(RELAY_4_Pin, HIGH);
 } // end of Relay4on() function
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn off the relay 4
  * 
@@ -603,8 +671,10 @@ void Relay4on(void) {
 void Relay4off(void) {
   digitalWrite(RELAY_4_Pin, LOW);
 } // end of Relay4off() function
-/******************************************************************************************************************/ 
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to check the status of relay 4
  * 
@@ -614,8 +684,10 @@ void Relay4off(void) {
 bool Relay4status (void) {
   return digitalRead(RELAY_4_Pin) == HIGH;
 } // end of Relay4status() function
-/******************************************************************************************************************/
+/**************************************************************************/
 
+
+/**************************************************************************/
 /**
  * @brief   Function to turn off all the relays
  * 
@@ -626,8 +698,7 @@ void RelaysAllOff(void) {
   digitalWrite(RELAY_3_Pin, LOW);
   digitalWrite(RELAY_4_Pin, LOW);
 } // end of RelaysAllOff() function
-/******************************************************************************************************************/
-
+/**************************************************************************/
 
 
 
