@@ -19,3 +19,9 @@
 #define BAUDRATE 57600
 
 #endif // _GLOBALS_H_
+
+
+// HC-06 Bluetooth Module Settings
+// HC-06 Bluetooth Module NAME = HOT TUB
+// HC-06 Bluetooth Module MAC ADDRESS = 93:D3:31:F4:24:AF
+// HC-06 Bluetooth Module PIN = 9416
